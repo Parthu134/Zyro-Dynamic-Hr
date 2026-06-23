@@ -107,7 +107,7 @@ def build_pipeline():
     vectorstore = FAISS.from_documents(chunks, embeddings)
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 4})
 
-    llm = ChatGroq(model="llama3-8b-8192", temperature=0.1, max_tokens=512, api_key=GROQ_API_KEY)
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1, max_tokens=512, api_key=GROQ_API_KEY)
     return retriever, llm
 
 retriever, llm = build_pipeline()
