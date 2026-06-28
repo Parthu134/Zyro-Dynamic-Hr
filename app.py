@@ -106,8 +106,8 @@ def build_pipeline():
         chunk_overlap=100
     )
     chunks = splitter.split_documents(documents)
-
-   embeddings = HuggingFaceEmbeddings(
+    
+    embeddings = HuggingFaceEmbeddings(
         model_name="BAAI/bge-base-en-v1.5",
         encode_kwargs={"normalize_embeddings": True}
     )
