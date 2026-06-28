@@ -8,7 +8,6 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_groq import ChatGroq
-from sentence_transformers import CrossEncoder
 
 # ── Page config ──────────────────────────────────────────────
 st.set_page_config(
@@ -68,14 +67,23 @@ CORPUS_PATH = os.environ.get("CORPUS_PATH", "./hr_docs/")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 RAG_PROMPT = ChatPromptTemplate.from_template(\"\"\"
-You are an HR assistant for Zyro Dynamics. Answer the employee's question using ONLY the provided context from the HR policy documents.
-If the answer is not found in the context, say "I don't have information about that in the HR policy documents."
-Be concise, professional, and helpful.
+You are Zyro Dynamics HR Assistant.
+
+Rules:
+
+- Use ONLY the provided context.
+- Answer the question directly.
+- Keep the answer concise.
+- Never invent information.
+- If the answer cannot be found, reply exactly:
+
+I don't have information about that in the HR policy documents.
 
 Context:
 {context}
 
-Question: {question}
+Question:
+{question}
 
 Answer:
 \"\"\")
@@ -112,55 +120,59 @@ def build_pipeline():
         model_name="BAAI/bge-base-en-v1.5",
         encode_kwargs={"normalize_embeddings": True}
     )
-    reranker = CrossEncoder(
-        "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    )
     vectorstore = FAISS.from_documents(chunks, embeddings)
     retriever = vectorstore.as_retriever(
         search_type="mmr",
         search_kwargs={
             "k":10,
-            "fetch_k":30,
-            "lambda_mult":0.5
+            "fetch_k":40,
+            "lambda_mult":0.4
         }
     )
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1, max_tokens=1024, api_key=GROQ_API_KEY)
-    return retriever, llm, reranker
+    return retriever, llm
 
-retriever, llm, reranker = build_pipeline()
+retriever, llm = build_pipeline()
 
 def format_docs(docs):
     return "\\n\\n".join(doc.page_content for doc in docs)
 
+@traceable
 def ask_bot(question: str):
-    oos_check = StrOutputParser().invoke(
-        llm.invoke(OOS_PROMPT.invoke({"question": question}))
+    # Check whether the question is HR-related
+    oos_prompt = OOS_PROMPT.invoke({"question": question})
+    oos_response = StrOutputParser().invoke(
+        llm.invoke(oos_prompt)
     ).strip().upper()
 
-    if "NO" in oos_check:
-        return {"answer": REFUSAL_MESSAGE, "sources": [], "in_scope": False}
+    if oos_response == "NO":
+        return {
+            "answer": REFUSAL_MESSAGE,
+            "sources": [],
+            "in_scope": False
+        }
 
+    # Retrieve relevant documents
     docs = retriever.invoke(question)
-    pairs = [(question, d.page_content) for d in docs]
 
-    scores = reranker.predict(pairs)
-    
-    ranked_docs = [
-        doc for _, doc in sorted(
-            zip(scores, docs),
-            key=lambda x: x[0],
-            reverse=True
-        )
-    ]
-    
-    docs = ranked_docs[:4]
-    
+    # Build context
     context = format_docs(docs)
-    answer = StrOutputParser().invoke(
-        llm.invoke(RAG_PROMPT.invoke({"context": context, "question": question}))
-    )
-    return {"answer": answer, "sources": docs, "in_scope": True}
 
+    # Generate answer
+    answer = StrOutputParser().invoke(
+        llm.invoke(
+            RAG_PROMPT.invoke({
+                "context": context,
+                "question": question
+            })
+        )
+    )
+
+    return {
+        "answer": answer,
+        "sources": docs,
+        "in_scope": True
+    }
 # ── Session state ─────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
