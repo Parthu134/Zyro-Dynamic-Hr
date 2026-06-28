@@ -8,6 +8,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_groq import ChatGroq
+from sentence_transformers import CrossEncoder
 
 # ── Page config ──────────────────────────────────────────────
 st.set_page_config(
