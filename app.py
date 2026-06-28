@@ -106,7 +106,7 @@ def build_pipeline():
 
     embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-base-en-v1.5")
     vectorstore = FAISS.from_documents(chunks, embeddings)
-    retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": 8}, "fetch_k":20, "lambda_mult":0.7)
+    retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": 8, "fetch_k":20, "lambda_mult":0.7})
 
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1, max_tokens=1024, api_key=GROQ_API_KEY)
     return retriever, llm
