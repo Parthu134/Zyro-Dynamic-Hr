@@ -101,17 +101,32 @@ def build_pipeline():
     loader = PyPDFDirectoryLoader(CORPUS_PATH)
     documents = loader.load()
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=150)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=100
+    )
     chunks = splitter.split_documents(documents)
 
-    embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-base-en-v1.5")
+   embeddings = HuggingFaceEmbeddings(
+        model_name="BAAI/bge-base-en-v1.5",
+        encode_kwargs={"normalize_embeddings": True}
+    )
+    reranker = CrossEncoder(
+        "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    )
     vectorstore = FAISS.from_documents(chunks, embeddings)
-    retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": 8, "fetch_k":20, "lambda_mult":0.7})
-
+    retriever = vectorstore.as_retriever(
+        search_type="mmr",
+        search_kwargs={
+            "k":10,
+            "fetch_k":30,
+            "lambda_mult":0.5
+        }
+    )
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1, max_tokens=1024, api_key=GROQ_API_KEY)
-    return retriever, llm
+    return retriever, llm, reranker
 
-retriever, llm = build_pipeline()
+retriever, llm, reranker = build_pipeline()
 
 def format_docs(docs):
     return "\\n\\n".join(doc.page_content for doc in docs)
@@ -125,6 +140,20 @@ def ask_bot(question: str):
         return {"answer": REFUSAL_MESSAGE, "sources": [], "in_scope": False}
 
     docs = retriever.invoke(question)
+    pairs = [(question, d.page_content) for d in docs]
+
+    scores = reranker.predict(pairs)
+    
+    ranked_docs = [
+        doc for _, doc in sorted(
+            zip(scores, docs),
+            key=lambda x: x[0],
+            reverse=True
+        )
+    ]
+    
+    docs = ranked_docs[:4]
+    
     context = format_docs(docs)
     answer = StrOutputParser().invoke(
         llm.invoke(RAG_PROMPT.invoke({"context": context, "question": question}))
