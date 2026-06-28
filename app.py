@@ -1,3 +1,4 @@
+app_code = """
 import os
 import streamlit as st
 from langchain_community.document_loaders import PyPDFDirectoryLoader
@@ -15,7 +16,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.markdown("""
+st.markdown(\"\"\"
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
@@ -51,21 +52,21 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     color: #7A4F00;
 }
 </style>
-""", unsafe_allow_html=True)
+\"\"\", unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(\"\"\"
 <div class="chat-header">
     <h1>🏢 Zyro Dynamics HR Help Desk</h1>
     <p>Ask me anything about leave, payroll, benefits, compliance, and more.</p>
 </div>
-""", unsafe_allow_html=True)
+\"\"\", unsafe_allow_html=True)
 
 # ── Pipeline (cached) ─────────────────────────────────────────
 CORPUS_PATH = os.environ.get("CORPUS_PATH", "./hr_docs/")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-RAG_PROMPT = ChatPromptTemplate.from_template("""
+RAG_PROMPT = ChatPromptTemplate.from_template(\"\"\"
 You are an HR assistant for Zyro Dynamics. Answer the employee's question using ONLY the provided context from the HR policy documents.
 If the answer is not found in the context, say "I don't have information about that in the HR policy documents."
 Be concise, professional, and helpful.
@@ -76,9 +77,9 @@ Context:
 Question: {question}
 
 Answer:
-""")
+\"\"\")
 
-OOS_PROMPT = ChatPromptTemplate.from_template("""
+OOS_PROMPT = ChatPromptTemplate.from_template(\"\"\"
 You are a classifier that determines if a question is related to HR topics.
 HR topics include: leave policies, payroll, benefits, compensation, attendance,
 recruitment, onboarding, offboarding, performance, training, compliance,
@@ -88,7 +89,7 @@ Respond with ONLY "YES" if the question is HR-related, or "NO" if it is out of s
 
 Question: {question}
 Answer:
-""")
+\"\"\")
 
 REFUSAL_MESSAGE = (
     "I'm sorry, I can only answer questions related to Zyro Dynamics HR policies. "
@@ -100,20 +101,20 @@ def build_pipeline():
     loader = PyPDFDirectoryLoader(CORPUS_PATH)
     documents = loader.load()
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=150)
     chunks = splitter.split_documents(documents)
 
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-base-en-v1.5")
     vectorstore = FAISS.from_documents(chunks, embeddings)
-    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+    retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": 8}, "fetch_k":20, "lambda_mult":0.7)
 
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1, max_tokens=512, api_key=GROQ_API_KEY)
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1, max_tokens=1024, api_key=GROQ_API_KEY)
     return retriever, llm
 
 retriever, llm = build_pipeline()
 
 def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
+    return "\\n\\n".join(doc.page_content for doc in docs)
 
 def ask_bot(question: str):
     oos_check = StrOutputParser().invoke(
@@ -177,3 +178,8 @@ if question := st.chat_input("Ask an HR question…"):
         "content": result["answer"],
         "sources": result.get("sources", [])
     })
+"""
+
+with open("app.py", "w") as f:
+    f.write(app_code.strip())
+print("app.py created.")
